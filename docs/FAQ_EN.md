@@ -248,8 +248,8 @@ First confirm whether `LITELLM_CONFIG` or `LLM_CHANNELS` is active, because eith
 # No need to configure GEMINI_API_KEY
 OPENAI_API_KEY=sk-xxxxxxxx
 OPENAI_BASE_URL=https://api.deepseek.com
-OPENAI_MODEL=deepseek-v4-flash
-# deepseek-chat / deepseek-reasoner remain compatible, but DeepSeek marks them deprecated after 2026/07/24
+OPENAI_MODEL=deepseek-flash
+# deepseek-chat / deepseek-reasoner remain compatible, but DeepSeek marks them deprecated after 2026/07/24; deepseek-v4-flash is a temporary legacy alias
 ```
 
 Supported model services:
@@ -332,7 +332,30 @@ Work through the following 5 checkpoints in order:
 
 ---
 
-### Q14.1: Where is the software version stored when I install with Docker?
+### Q14.1: Network/DNS resolution fails inside Docker (e.g., `api.tushare.pro` or `searchapi.eastmoney.com` cannot be resolved)?
+
+**Symptom**: Logs report `Temporary failure in name resolution` or `NameResolutionError`, preventing both stock data APIs and LLM APIs from connecting.
+
+**Cause**: On a custom Docker bridge network, containers rely on Docker's embedded DNS, which can fail behind side-router or specialized corporate/LAN DNS setups.
+
+**Solutions** (try in order):
+
+1. **Configure explicit DNS servers**: Add a `dns` block under `x-common` in `docker/docker-compose.yml`:
+   ```yaml
+   dns:
+     - 223.5.5.5
+     - 119.29.29.29
+     - 8.8.8.8
+   ```
+   Then run `docker-compose down` followed by `docker-compose up -d --force-recreate` to recreate the containers.
+
+2. **Switch to host networking**: If explicit DNS still fails, add `network_mode: host` to the `server` service and remove its `ports` mapping. In host mode `ports` is ignored and **the port is controlled by `--port` in `command`**. If the default port is already in use on the host, change it (for example `API_PORT=8080` in `.env`) and access `http://localhost:8080`.
+
+> 📌 Related Issue: [#372](https://github.com/ZhuLinsen/daily_stock_analysis/issues/372)
+
+---
+
+### Q14.2: Where is the software version stored when I install with Docker?
 
 **Short answer**: For Docker users, the authoritative version is **the image tag you actually deployed**, not a hardcoded constant in a Python source file.
 
@@ -355,7 +378,7 @@ Work through the following 5 checkpoints in order:
 
 ### Q15: macOS says the desktop app is damaged or cannot be opened?
 
-**Cause**: The current macOS DMG is not signed and notarized with an Apple Developer certificate. After a browser download, macOS Gatekeeper may attach the quarantine attribute and block startup.
+**Cause**: Current macOS DMG builds apply inside-out ad-hoc signatures during packaging so Apple Silicon (`arm64`) binaries can run, but are still not signed and notarized with an Apple Developer certificate. After a browser download, macOS Gatekeeper may attach the quarantine attribute and block startup.
 
 **Solution**:
 
@@ -368,7 +391,15 @@ Work through the following 5 checkpoints in order:
    open "/Applications/Daily Stock Analysis.app"
    ```
 
-Replace the path if the app is not in `/Applications`. Never run `xattr` against the entire `/Applications` directory. This is a temporary way to allow a trusted unsigned app; it is not a substitute for signing or notarization. See the [desktop packaging guide](desktop-package.md#macos-提示应用已损坏无法打开) for the complete troubleshooting notes.
+4. For earlier `v3.35.0` Apple Silicon builds that lacked ad-hoc signatures and still fail to launch after clearing quarantine, **prefer upgrading to a newer Release DMG**; to re-sign in place, sign the frozen backend Mach-O binaries under `Contents/Resources/backend` before re-signing the outer `.app` bundle (`codesign --deep` skips `Contents/Resources/backend`):
+
+   ```bash
+   find "/Applications/Daily Stock Analysis.app/Contents/Resources/backend" -type f -exec sh -c 'file -b "$1" | grep -q "Mach-O" && codesign --force --sign - --timestamp=none "$1"' _ {} \;
+   codesign --force --deep --sign - --timestamp=none "/Applications/Daily Stock Analysis.app"
+   open "/Applications/Daily Stock Analysis.app"
+   ```
+
+Replace the path if the app is not in `/Applications`. Never run `xattr` against the entire `/Applications` directory. This is a temporary way to allow a trusted unnotarized app; it is not a substitute for Developer ID signing or notarization. See the [desktop packaging guide](desktop-package.md#macos-提示应用已损坏无法打开) for the complete troubleshooting notes.
 
 > Related Issue: [#2113](https://github.com/ZhuLinsen/daily_stock_analysis/issues/2113)
 
@@ -397,7 +428,26 @@ python main.py --market-only
 
 ---
 
-### Q18: Why didn't GitHub Actions run automatically on schedule in my fork, and how do I keep it updated?
+### Q18: Why does a manual weekend trigger in GitHub Actions still skip as a non-trading day?
+
+**Symptom**: Even when manually triggering a run (or after configuring `TRADING_DAY_CHECK_ENABLED`), the log reports that all target markets are closed today and skips execution.
+
+**Solutions**:
+1. Open `Actions → 每日股票分析 → Run workflow`
+2. Set `force_run` to `true` when manually triggering (forces a single run)
+3. To disable trading-day checks permanently, configure in `Settings → Secrets and variables → Actions`:
+   ```bash
+   TRADING_DAY_CHECK_ENABLED=false
+   ```
+
+**Rules**:
+- `TRADING_DAY_CHECK_ENABLED=true` and `force_run=false`: skip non-trading days (default)
+- `force_run=true`: execute this run even on a non-trading day
+- `TRADING_DAY_CHECK_ENABLED=false`: bypass trading-day checks for both scheduled and manual runs
+
+---
+
+### Q19: Why didn't GitHub Actions run automatically on schedule in my fork, and how do I keep it updated?
 
 **Causes**:
 1. GitHub disables scheduled workflows on newly forked repositories until you manually enable them in the `Actions` tab.
@@ -420,4 +470,4 @@ If the above content doesn't solve your issue, welcome to:
 
 ---
 
-*Last updated: 2026-08-03*
+*Last updated: 2026-11-28*

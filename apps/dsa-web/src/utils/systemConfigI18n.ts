@@ -1,4 +1,4 @@
-import type { SystemConfigCategory } from '../types/systemConfig';
+import type { SetupStatusResponse, SystemConfigCategory } from '../types/systemConfig';
 import type { UiLanguage } from '../i18n/uiText';
 
 const categoryTitleMap: Record<UiLanguage, Record<SystemConfigCategory, string>> = {
@@ -173,6 +173,7 @@ const fieldTitleMap: Record<string, string> = {
   MAX_WORKERS: '最大并发线程数',
   SCHEDULE_ENABLED: '启用定时任务',
   DSA_RUNTIME_SCHEDULER_TIMEOUT_SECONDS: '定时分析硬超时（秒）',
+  DSA_TIMEOUT_PARTIAL_NOTIFY: '超时部分完成通知',
   SCHEDULE_TIMES: '定时执行时间',
   SCHEDULE_RUN_IMMEDIATELY: '启动定时模式后立即执行',
   TRADING_DAY_CHECK_ENABLED: '启用交易日检查',
@@ -281,13 +282,13 @@ const fieldDescriptionMap: Record<string, string> = {
   ANSPIRE_LLM_ENABLED: '开启后，未配置更高优先级 LLM 渠道或 OpenAI 兼容密钥时，ANSPIRE_API_KEYS 会自动作为 Anspire 大模型密钥使用。',
   ANSPIRE_LLM_BASE_URL: 'Anspire OpenAI 兼容网关地址，默认 https://open-gateway.anspire.cn/v6，海外可用 https://open-gateway.anspire.ai/v6。',
   ANSPIRE_LLM_MODEL: '仅填写 ANSPIRE_API_KEYS 时自动使用的模型，默认 Doubao-Seed-2.0-lite。',
-  DEEPSEEK_API_KEY: 'DeepSeek 官方 API 密钥。填写后自动使用 deepseek-v4-flash 模型。',
+  DEEPSEEK_API_KEY: 'DeepSeek 官方 API 密钥。填写后自动使用 deepseek-flash 模型（旧别名 deepseek-v4-flash 仅临时兼容）。',
   GEMINI_API_KEY: '用于 Gemini 服务调用的密钥。',
   GEMINI_MODEL: '设置 Gemini 分析模型名称。',
   GEMINI_TEMPERATURE: '控制模型输出随机性，范围通常为 0.0 到 2.0。',
   OPENAI_API_KEY: '用于 OpenAI 兼容服务调用的密钥。',
   OPENAI_BASE_URL: 'OpenAI 兼容 API 地址，例如 https://api.deepseek.com/v1。',
-  OPENAI_MODEL: 'OpenAI 兼容模型名称，例如 gpt-6.1-terra、deepseek-v4-flash。',
+  OPENAI_MODEL: 'OpenAI 兼容模型名称，例如 gpt-6.1-terra、deepseek-flash。',
   WECHAT_WEBHOOK_URL: '企业微信机器人 Webhook 地址。',
   FEISHU_WEBHOOK_URL: '用于群消息推送的飞书自定义机器人 Webhook。它才是通知发送入口，和 FEISHU_APP_ID / FEISHU_APP_SECRET 不是一回事。',
   FEISHU_WEBHOOK_SECRET: '飞书群机器人安全设置里的“签名校验”密钥。开启签名后必须同步填写，否则会推送失败。',
@@ -351,6 +352,7 @@ const fieldDescriptionMap: Record<string, string> = {
   MAX_WORKERS: '异步任务队列最大并发数。配置保存后，队列空闲时会自动应用；繁忙时延后生效。',
   SCHEDULE_ENABLED: '启用每日定时分析任务。',
   DSA_RUNTIME_SCHEDULER_TIMEOUT_SECONDS: 'Web/API 定时分析的最长运行时间；超时后终止独立分析进程，最小 60 秒。',
+  DSA_TIMEOUT_PARTIAL_NOTIFY: 'Web/API 定时分析硬超时后，仅在已有落库结果且开关允许推送时尝试发送「部分完成」通知；设为 false 时仍记录结构化 last_error，但不推送。',
   SCHEDULE_TIMES: '多个每日定时任务执行时间，使用逗号分隔；Web 设置页会以时间控件维护。',
   SCHEDULE_RUN_IMMEDIATELY: '仅影响 schedule 模式启动时是否立即触发一次任务；保存 Web 设置不会触发执行。',
   TRADING_DAY_CHECK_ENABLED: '启用交易日校验，非交易日自动跳过定时分析。',
@@ -360,7 +362,7 @@ const fieldDescriptionMap: Record<string, string> = {
   RUN_IMMEDIATELY: '程序启动后立即执行一次分析任务。',
   MARKET_REVIEW_ENABLED: '是否启用大盘复盘流程。',
   DAILY_MARKET_CONTEXT_ENABLED: '默认开启。开启后会把当日大盘摘要注入个股分析，并在高风险或退潮环境下软化激进买入建议；关闭后仍可运行大盘复盘。',
-  MARKET_REVIEW_REGION: '大盘复盘默认市场区域（如 cn/hk/us/jp/kr/tw/both），支持逗号分隔子集，如 `cn,us,jp`。',
+  MARKET_REVIEW_REGION: '大盘复盘默认市场区域（如 cn/hk/us/jp/kr/tw/au/both），支持逗号分隔子集，如 `cn,us,jp`。',
   MARKET_REVIEW_COLOR_SCHEME: '控制大盘复盘指数涨跌幅图标颜色：green_up 为绿涨红跌，red_up 为红涨绿跌。',
   ANALYSIS_DELAY: '启动任务前的延迟秒数，可用于等待依赖服务就绪。',
   SAVE_CONTEXT_SNAPSHOT: '控制是否持久化整份分析历史 context_snapshot；关闭后不会保存低敏输入概览、市场阶段摘要和增强上下文，但不影响当次分析的 pack 构建或 Prompt 摘要。',
@@ -625,4 +627,21 @@ export function getFieldOptionLabel(
   }
 
   return fallbackLabel ?? value;
+}
+
+/** Show the English setup-check texts the API sends when the UI is in English. */
+export function localizeSetupStatus(
+  status: SetupStatusResponse | null,
+  locale: UiLanguage,
+): SetupStatusResponse | null {
+  if (!status || locale !== 'en') return status;
+  return {
+    ...status,
+    checks: status.checks.map((check) => ({
+      ...check,
+      title: check.titleEn || check.title,
+      message: check.messageEn || check.message,
+      nextStep: check.nextStep ? check.nextStepEn || check.nextStep : check.nextStep,
+    })),
+  };
 }

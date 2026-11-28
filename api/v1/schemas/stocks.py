@@ -103,6 +103,14 @@ class StockHistoryResponse(BaseModel):
     stock_name: Optional[str] = Field(None, description="股票名称")
     period: str = Field(..., description="K 线周期")
     data: List[KLineData] = Field(default_factory=list, description="K 线数据列表")
+    price_adjustment: Optional[Literal["forward", "backward", "unadjusted", "unknown"]] = Field(
+        None,
+        description="价格复权口径（forward/backward/unadjusted/unknown）",
+    )
+    ohlc_synthesized: Optional[bool] = Field(
+        None,
+        description="开高低价是否由收盘价回填合成",
+    )
     
     model_config = ConfigDict(json_schema_extra={
         "example": {
@@ -177,7 +185,7 @@ class StockProfileEvidenceQuality(BaseModel):
 class StockProfileResponse(BaseModel):
     requested_code: str
     canonical_code: str
-    market: Literal["cn", "hk", "us", "jp", "kr", "tw"]
+    market: Literal["cn", "hk", "us", "jp", "kr", "tw", "au"]
     as_of: str
     quote: StockProfileQuoteBlock
     history: StockProfileHistoryBlock
